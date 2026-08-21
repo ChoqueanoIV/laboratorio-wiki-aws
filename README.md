@@ -1,316 +1,294 @@
-# 🧭 Laboratório Prático: A Wiki Perdida dos Arquivos Corporativos
+# Wiki Corporativa Inteligente com AWS
 
-## 🎮 Contexto da Missão
+Proposta de arquitetura para transformar documentos corporativos heterogêneos em conhecimento pesquisável, rastreável e seguro usando exclusivamente serviços AWS.
 
-Você acaba de encontrar uma pasta chamada `raw/`.
+O projeto parte de três fontes reais do laboratório — um PDF digital, uma ata digitalizada em PNG e uma exportação CSV de CRM — e demonstra por que cada formato exige um pipeline diferente. A solução combina RAG para conhecimento documental com SQL determinístico para dados estruturados.
 
-Dentro dela estão documentos brutos de uma empresa fictícia: uma ata de reunião em PDF, uma folha de ata digitalizada e uma exportação de oportunidades do CRM.
+> **Estado do projeto em 21/08/2026:** discovery, desenho, POC AWS controlada e cleanup concluídos. A POC real em `us-east-1` preservou os três originais, executou uma página Textract, indexou dois documentos em Bedrock Knowledge Bases com S3 Vectors e realizou consultas limitadas. Todos os recursos persistentes inventariados foram removidos e a ausência foi verificada. O Cost Explorer ainda não consolidou dados para o período; custo observado não foi tratado como zero.
 
-Os três chegam de jeitos diferentes e exigem tratamentos diferentes. Um já nasce com texto dentro, outro é só imagem e precisa de OCR, e o terceiro não é texto corrido, é tabela. Parte do desafio é descobrir isso abrindo os arquivos.
+## Visão executiva
 
-Esses arquivos representam anos de conhecimento espalhado, sem padronização, sem busca eficiente e sem uma forma simples de encontrar decisões, responsáveis, datas, temas discutidos ou próximos passos definidos em reuniões anteriores.
+O problema não é apenas armazenar arquivos. É preservar o original, extrair informação sem perder estrutura, distinguir evidência de inferência e responder perguntas com fontes verificáveis.
 
-Sua missão é propor, usando apenas serviços da AWS, como transformar esses dados brutos em uma **Wiki Corporativa Inteligente, pesquisável e segura**.
+A arquitetura proposta segue quatro princípios:
 
-Você não precisa implementar a solução completa.
+1. **Tratar cada formato pela sua natureza:** PDF digital sem OCR, PNG com Amazon Textract e CSV como tabela.
+2. **Preservar e rastrear:** cada derivado aponta para o objeto S3 original, sua versão e checksum.
+3. **Separar semântica de cálculo:** atas usam RAG; agregações do CRM usam AWS Glue e Amazon Athena.
+4. **Não responder sem evidência:** ausência, conflito, baixa confiança ou falta de autorização resultam em resposta limitada ou revisão humana.
 
-O objetivo deste laboratório é analisar os arquivos da pasta `raw/` e preencher o arquivo [`resposta.md`](./resposta.md), descrevendo como você resolveria esse desafio passo a passo.
+## Acervo analisado
 
----
+Os três arquivos estão diretamente em `raw/`, que permanece somente leitura.
 
-## 🏛️ A Lenda dos Arquivos Perdidos
+| Arquivo | Natureza observada | Conteúdo e desafio principal | Tratamento proposto |
+|---|---|---|---|
+| `ata_reuniao_vendas_sa.pdf` | PDF digital, 5 páginas, camada textual | Tabelas, 5 decisões, 6 ações, 4 riscos e continuidade entre páginas | Extração direta em Lambda, sem OCR; preservar página, seção e relações tabulares |
+| `ata_resultados_vendas_novos_dados.png` | Imagem digitalizada, 1900 × 2700 pixels | Tabela, ruído, inclinação e handwriting: “conferir CRM” e “ação prioritária” | Amazon Textract para texto, tabela, geometria, handwriting e confiança |
+| `vendas_sa_dados_ficticios_laboratorio.csv` | CSV UTF-8 com BOM, 240 registros e 19 colunas | Datas, categorias, percentuais, valores e vazios dependentes do status | Validar tipos, preservar estrutura e consultar com Glue/Athena; não converter cegamente em texto para RAG |
 
-Durante anos, a empresa registrou decisões importantes em diferentes formatos de documentos. Com o tempo, esses arquivos foram se acumulando dentro da pasta `raw/`, sem organização e sem uma estrutura clara de consulta.
+O inventário factual completo, incluindo hashes SHA-256, está em [`docs/ACERVO.md`](docs/ACERVO.md).
 
-Agora, a liderança quer responder perguntas como:
+## Arquitetura proposta
 
-- “Quais decisões foram tomadas sobre o projeto X?”
-- “Quem ficou responsável pela ação Y?”
-- “Em quais reuniões o tema segurança foi discutido?”
-- “Quais foram os principais riscos apontados no último trimestre?”
-- “Existe algum documento que fale sobre orçamento, contratação ou fornecedores?”
-- “Quais próximos passos ficaram pendentes em reuniões anteriores?”
+```mermaid
+flowchart TB
+    LOCAL["raw/ local<br/>somente leitura"] --> S3RAW["Amazon S3 Raw<br/>Versioning + checksum"]
+    S3RAW --> EVT["Amazon EventBridge"]
+    EVT --> SFN["AWS Step Functions"]
+    SFN --> CLASS["AWS Lambda<br/>validar e classificar"]
+    CLASS --> TYPE{"Natureza"}
 
-Para isso, a empresa deseja criar uma Wiki Inteligente, capaz de pesquisar, resumir e responder perguntas com base nos documentos originais.
+    TYPE -->|"PDF digital"| PDF["Lambda<br/>extração sem OCR"]
+    TYPE -->|"PNG / PDF escaneado"| OCR["Amazon Textract"]
+    TYPE -->|"CSV"| CSV["Lambda<br/>validação tabular"]
 
----
+    PDF --> NORM["Normalização + metadados<br/>+ proveniência"]
+    OCR --> NORM
+    NORM --> S3PROC["Amazon S3 Processed"]
+    S3PROC --> KB["Bedrock Knowledge Bases"]
+    KB --> EMB["Titan Text Embeddings V2"]
+    EMB --> VEC["Amazon S3 Vectors"]
 
-## 📁 Estrutura Inicial do Repositório
+    CSV --> PARQ["S3 Parquet"]
+    PARQ --> GLUE["AWS Glue Data Catalog"]
+    GLUE --> ATH["Amazon Athena"]
 
-```bash
-.
-├── README.md
-├── resposta.md
-└── raw/
-    ├── ata_reuniao_vendas_sa.pdf                    # 5 paginas, camada de texto: sem OCR
-    ├── ata_resultados_vendas_novos_dados.png        # 1 pagina digitalizada, so pixels: exige OCR
-    └── vendas_sa_dados_ficticios_laboratorio.csv    # 240 oportunidades do CRM, 19 colunas
+    USER["Usuário"] --> AMP["AWS Amplify Hosting"]
+    AMP --> COG["Amazon Cognito"]
+    COG --> API["Amazon API Gateway"]
+    API --> ROUTER["Lambda<br/>autorizar + rotear"]
+    ROUTER -->|"documental"| KB
+    ROUTER -->|"analítica"| ATH
+    ROUTER -->|"mista"| KB
+    ROUTER -->|"mista"| ATH
+    KB --> GEN["Amazon Bedrock<br/>resposta com fontes"]
+    ATH --> RESP["Lambda<br/>compor e validar"]
+    GEN --> RESP
+    RESP --> API
+
+    SEC["IAM + criptografia<br/>CloudWatch + CloudTrail<br/>Budgets"] -. controles .-> S3RAW
+    SEC -. controles .-> ROUTER
 ```
 
-A pasta `raw/` representa os dados brutos da empresa.
+O diagrama detalhado e seus limites estão em [`diagrams/architecture.md`](diagrams/architecture.md).
 
-> **Importante:** não existem subpastas dentro de `raw/`. Todos os arquivos estarão misturados diretamente nessa pasta.
+## Fluxo de ponta a ponta
 
-Parte do desafio é explicar como você organizaria, processaria e classificaria esses documentos usando serviços da AWS.
+### 1. Ingestão e preservação
 
----
+- Upload autenticado para um bucket S3 privado e versionado.
+- `document_id` derivado do SHA-256 para deduplicação e correlação.
+- Manifesto com nome original, chave, `version_id`, checksum, MIME, timestamps e estado.
+- S3 Block Public Access, TLS e criptografia em repouso.
+- Original nunca é movido ou alterado pelo pipeline.
 
-## 🎯 Objetivo do Desafio
+### 2. Classificação e processamento
 
-Criar uma proposta técnica explicando como transformar os arquivos da pasta `raw/` em uma Wiki de Dados pesquisável usando somente serviços da AWS.
+- EventBridge inicia a Step Functions após criação do objeto.
+- Lambda compara assinatura binária, extensão, MIME, camada textual e esquema.
+- PDF digital: extração direta, evitando custo e erro de OCR.
+- PNG/PDF escaneado: Textract preserva blocos, tabelas, geometria e confiança.
+- CSV: validação das 19 colunas, tipos e regras dependentes do status; saída opcional em Parquet.
+- Falhas definitivas geram quarentena lógica e manifesto de erro sem alterar o original.
 
-Sua resposta final deve ser escrita no arquivo:
+### 3. Normalização e metadados
 
-```bash
-resposta.md
-```
+Documentos recebem um contrato JSON versionado com:
 
-Ao final, uma pessoa deve conseguir entender:
+- `document_id`, `source_uri`, `source_version_id` e checksum;
+- tipo, data, tema, participantes, decisões, responsáveis, ações, prazos e riscos;
+- página, bloco ou região visual que sustenta cada campo;
+- `confidence` por campo/bloco;
+- proveniência: `observed`, `deterministic_derived`, `ai_inferred` ou `human_validated`;
+- timestamps e versão do esquema.
 
-- Como os documentos seriam armazenados;
-- Como os arquivos escaneados seriam processados;
-- Como o texto seria extraído e limpo;
-- Como os metadados seriam organizados;
-- Como os documentos seriam indexados;
-- Como a busca semântica funcionaria;
-- Como uma IA poderia responder perguntas com base nos documentos;
-- Como garantir segurança, rastreabilidade e governança.
+S3 mantém o conteúdo e o histórico completos. DynamoDB é opcional para estado e filtros de baixa latência. Glue Data Catalog descreve o CRM validado/Parquet.
 
----
+### 4. Indexação documental
 
-## ⚔️ Regras da Expedição
+- Chunking respeita seções, decisões, ações, riscos e tabelas.
+- Baseline de 300–500 tokens, com pequena sobreposição apenas em texto contíguo; parâmetros devem ser calibrados por avaliação.
+- Amazon Bedrock Knowledge Bases sincroniza somente documentos aprovados.
+- Titan Text Embeddings V2 é o candidato inicial para embeddings em português.
+- S3 Vectors é a primeira opção de vector store para baixa frequência e operação sem cluster.
 
-Antes de começar, respeite as regras do templo:
+S3 Vectors oferece busca semântica, não busca híbrida nativa nessa integração. IDs exatos usam filtros/busca operacional; OpenSearch Serverless só seria adotado se medições justificarem busca híbrida, facetas, QPS ou latência adicionais.
 
-- Use apenas serviços da AWS.
-- Não use ferramentas externas de OCR, banco vetorial ou IA fora da AWS.
-- Não altere os arquivos da pasta `raw/`.
-- Considere que todos os documentos estão diretamente dentro da pasta `raw/`, sem subpastas.
-- Preencha sua solução no arquivo `resposta.md`.
-- Descreva sua proposta de forma clara, organizada e objetiva.
-- Justifique suas escolhas técnicas.
-- Explique o fluxo de dados do início ao fim.
-- Pense em segurança, rastreabilidade, custo e escalabilidade.
-- Não basta listar serviços: explique como eles se conectam.
+### 5. Consulta híbrida de aplicação
 
----
+| Tipo de pergunta | Rota | Fonte da resposta |
+|---|---|---|
+| Decisões, responsáveis, riscos e temas das atas | Knowledge Bases → RAG no Bedrock | Chunks com documento, página/bloco e versão original |
+| Contagens, somas, médias e filtros do CRM | Glue → Athena | Resultado SQL determinístico e parâmetros da consulta |
+| Pergunta que combina atas e CRM | RAG + Athena | Evidências documentais e analíticas separadamente rotuladas |
 
-# 🗺️ Quests Principais
+A Lambda roteadora aplica autorização antes da recuperação. O modelo recebe apenas evidências permitidas. Se não houver suporte suficiente, a Wiki informa a limitação em vez de inventar nomes, datas ou números.
 
-## ✅ Quest 1: O Mapa dos Arquivos Perdidos
+## Serviços e justificativas
 
-Antes de construir qualquer solução, você precisa entender o terreno.
-
-Explore os arquivos da pasta `raw/` e descreva quais tipos de documentos existem, quais informações eles podem conter e quais desafios eles apresentam.
-
-### Sua missão
-
-- [ ] Identificar os formatos de arquivo presentes na pasta `raw/`.
-- [ ] Diferenciar documentos digitais de documentos escaneados.
-- [ ] Identificar possíveis desafios, como baixa qualidade de imagem, arquivos sem padrão, documentos longos, tabelas, anotações soltas ou textos incompletos.
-- [ ] Descrever quais informações são importantes extrair das atas e documentos.
-- [ ] Explicar como você classificaria os arquivos sem depender de subpastas.
-
-### Pontos de atenção
-
-Considere que os documentos podem conter:
-
-- Datas de reuniões;
-- Participantes;
-- Temas discutidos;
-- Decisões tomadas;
-- Responsáveis por ações;
-- Prazos;
-- Riscos;
-- Pendências;
-- Projetos citados;
-- Áreas ou departamentos envolvidos.
-
----
-
-## ✅ Quest 2: O Portal de Entrada na AWS
-
-Agora que você conhece os documentos, explique como eles entrariam no ambiente da AWS e como seriam processados.
-
-Sua missão é descrever o pipeline inicial: armazenamento, leitura dos arquivos, extração de texto e preparação dos dados.
-
-### Serviços AWS que você pode considerar
-
-- Amazon S3
-- Amazon Textract
-- AWS Lambda
-- AWS Step Functions
-- Amazon CloudWatch
-- AWS IAM
-- AWS KMS
-
-### Sua missão
-
-- [ ] Explicar como os arquivos da pasta `raw/` seriam enviados para o Amazon S3.
-- [ ] Definir como preservar os arquivos originais.
-- [ ] Explicar como identificar quais documentos precisam de OCR.
-- [ ] Descrever como o Amazon Textract seria usado para documentos escaneados.
-- [ ] Explicar como o PDF com camada de texto seria tratado, sem passar por OCR.
-- [ ] Explicar como o CSV do CRM entraria na solução, lembrando que ele é tabela e não texto corrido.
-- [ ] Definir onde os textos extraídos seriam armazenados.
-- [ ] Explicar como falhas de processamento seriam registradas.
-
----
-
-## ✅ Quest 3: A Relíquia dos Metadados
-
-Uma Wiki inteligente não depende apenas do texto dos documentos.
-
-Ela também precisa de metadados para organizar, filtrar e contextualizar as informações.
-
-Nesta quest, explique como você transformaria documentos bagunçados em registros organizados e úteis.
-
-### Serviços AWS que você pode considerar
-
-- Amazon Bedrock
-- Amazon Bedrock Knowledge Bases
-- AWS Lambda
-- Amazon S3
-- Amazon DynamoDB
-- AWS Glue Data Catalog
-
-### Sua missão
-
-- [ ] Definir um formato padronizado para os textos processados.
-- [ ] Explicar como limpar ruídos, quebras de linha e conteúdos duplicados.
-- [ ] Propor quais metadados seriam extraídos de cada documento.
-- [ ] Explicar como a IA poderia ajudar a identificar temas, decisões, responsáveis e pendências.
-- [ ] Descrever onde os metadados seriam armazenados.
-- [ ] Explicar como conectar cada metadado ao documento original.
-
-### Exemplos de metadados úteis
-
-| Metadado | Exemplo |
+| Serviço | Papel e justificativa |
 |---|---|
-| Nome do documento | `ata_reuniao_vendas_sa.pdf` |
-| Tipo de documento | Ata de reunião |
-| Data identificada | 15/03/2026 |
-| Tema principal | Planejamento comercial |
-| Participantes | Ana, Bruno, Camila |
-| Decisões tomadas | Aprovar nova campanha |
-| Responsáveis | Bruno |
-| Próximos passos | Enviar proposta revisada |
-| Nível de confidencialidade | Interno |
-| Arquivo original | Caminho no Amazon S3 |
+| Amazon S3 | Fonte canônica dos originais e armazenamento barato de derivados, manifestos e Parquet |
+| EventBridge + Step Functions | Eventos desacoplados e orquestração visível de rotas, retries e falhas |
+| AWS Lambda | Classificação, extração direta, validação, normalização e roteamento serverless |
+| Amazon Textract | OCR AWS para texto impresso, tabelas e handwriting do PNG/PDF escaneado |
+| Amazon Bedrock | Enriquecimento controlado, embeddings e geração fundamentada |
+| Amazon Bedrock Knowledge Bases | Ingestão e recuperação gerenciada de chunks documentais |
+| Amazon S3 Vectors | Vector store serverless para consultas semânticas de baixa frequência |
+| AWS Glue Data Catalog + Athena | Esquema e SQL determinístico sobre o CRM estruturado |
+| DynamoDB | Catálogo operacional opcional quando filtros/estado exigirem baixa latência |
+| Amplify + Cognito + API Gateway | Interface web hospedada, autenticação e API governada |
+| IAM + SSE-S3/KMS | Menor privilégio e criptografia; KMS somente com requisito que justifique custo |
+| CloudWatch + CloudTrail | Observabilidade operacional e trilha de auditoria |
+| AWS Budgets + Cost Explorer | Alerta de US$ 5 e acompanhamento de gasto; Budget não bloqueia cobrança |
 
----
+A matriz completa com chamador, entrada, saída e alternativa de cada serviço está em [`resposta.md`](resposta.md#2-serviços-aws-utilizados).
 
-## ✅ Quest 4: O Oráculo da Wiki Inteligente
+## Segurança e governança
 
-Com os documentos processados e enriquecidos, chegou a hora de propor como a Wiki Inteligente funcionaria.
+- S3 Block Public Access e nenhum objeto público.
+- IAM least privilege com papéis separados para ingestão, processamento, consulta e administração.
+- Cognito e escopos/grupos transformados em filtros antes da busca.
+- Nova autorização ao abrir a fonte; links S3 pré-assinados curtos.
+- SSE-S3 como baseline econômico; KMS quando houver chave própria, separação de funções ou auditoria da chave.
+- CloudTrail para chamadas/configurações relevantes e CloudWatch com logs sanitizados.
+- Prompts, tokens, credenciais e conteúdo sensível fora do Git e dos logs por padrão.
+- Bedrock Guardrails como camada complementar, nunca como substituto de autorização e validação das fontes.
+- Conteúdo de baixa confiança ou conflito encaminhado para revisão humana.
+- Chat somente consulta: nenhuma ação operacional é executada pela IA.
 
-Nesta quest, descreva como a empresa poderia pesquisar os documentos, fazer perguntas em linguagem natural e receber respostas com base nos arquivos originais.
+## Observabilidade e qualidade
 
-### Serviços AWS que você pode considerar
+Métricas propostas:
 
-- Amazon Bedrock
-- Amazon Bedrock Knowledge Bases
-- Amazon Bedrock Agents
-- Amazon OpenSearch Serverless
-- Amazon Aurora PostgreSQL com pgvector
-- Amazon S3 Vectors
-- Amazon Q Business
-- Amazon API Gateway
-- AWS Lambda
-- Amazon Cognito
-- Amazon CloudWatch
-- AWS CloudTrail
+- falhas, retries, throttling e duração por etapa;
+- confiança do Textract e volume em `REVIEW_REQUIRED`;
+- latência de recuperação e geração;
+- tokens de entrada/saída e chunks recuperados;
+- bytes escaneados e tempo de consulta no Athena;
+- respostas sem resultado, cobertura e validade de citações;
+- divergências entre números apresentados e resultados do Athena;
+- feedback dos usuários e custo por ambiente.
 
-### Sua missão
+Um conjunto versionado de perguntas deve ser executado após mudanças de chunking, embedding, prompt ou modelo. Fluência não é critério de correção: a avaliação precisa conferir recuperação, fontes e números.
 
-- [ ] Explicar como os documentos seriam divididos em trechos menores.
-- [ ] Descrever como embeddings seriam gerados.
-- [ ] Definir onde a base vetorial seria armazenada.
-- [ ] Explicar como a busca semântica encontraria informações relevantes.
-- [ ] Descrever como o Amazon Bedrock responderia perguntas com base nos documentos.
-- [ ] Explicar como as respostas citariam ou referenciariam os arquivos de origem.
-- [ ] Propor uma interface de consulta para os usuários.
-- [ ] Explicar como controlar acesso, segurança e auditoria.
-- [ ] Descrever como monitorar uso, erros, custos e qualidade das respostas.
+## Custos e FinOps
 
-### Exemplo de experiência esperada
+A solução prioriza serviços serverless e pay-per-use, mas isso não significa custo zero.
 
-Um usuário poderia perguntar:
+- S3: armazenamento, requests, versões e transferência.
+- Textract: páginas/imagens processadas e recursos analisados.
+- Bedrock: tokens, embeddings, enriquecimento e geração.
+- Knowledge Bases/S3 Vectors: ingestão, armazenamento vetorial e consultas.
+- Athena: bytes escaneados; Parquet e workgroup com limites reduzem risco.
+- CloudWatch/CloudTrail: volume e retenção de logs/eventos.
+- KMS: chamadas e chave, se adotado.
 
-```md
-Quais foram as principais decisões tomadas sobre o projeto de expansão comercial?
+Antes de qualquer POC: verificar pricing na região escolhida, criar alerta no AWS Budgets de **US$ 5**, limitar chamadas/tokens/bytes, inventariar recursos e definir cleanup. O Budget é um alerta, não um mecanismo automático de interrupção.
+
+## Falhas e comportamento seguro
+
+| Situação | Comportamento esperado |
+|---|---|
+| PDF sem texto utilizável | Reclassificar para revisão e só então considerar Textract |
+| OCR com baixa confiança | Preservar saída, marcar `REVIEW_REQUIRED` e solicitar validação |
+| CSV com esquema inválido | Bloquear publicação analítica e registrar diagnóstico |
+| Evento repetido | Detectar checksum/`document_id` e evitar processamento pago duplicado |
+| Falha transitória | Retry limitado com espera exponencial |
+| Falha definitiva | Quarentena lógica; original permanece intacto |
+| Fonte ausente ou conflitante | Declarar evidência insuficiente ou apresentar conflito |
+| Usuário sem autorização | Não recuperar nem expor conteúdo ou link da fonte |
+
+## Exemplos de perguntas
+
+### Documentais
+
+- Quais decisões foram aprovadas na reunião de 08/07/2026?
+- Quem ficou responsável pela ação `A-003` e qual é o prazo?
+- Quais riscos foram registrados para a campanha Rota 120?
+- O que significa a anotação “ação prioritária” e a qual prazo ela está associada?
+- Em quais fontes aparecem pendências relacionadas ao CRM?
+
+### Analíticas sobre o CRM
+
+- Quantas oportunidades existem por status e região?
+- Qual é o valor líquido total das oportunidades ganhas por campanha?
+- Quais motivos de perda são mais frequentes por segmento?
+- Quais oportunidades abertas têm próxima atividade em determinado período?
+
+### Mistas
+
+- O que a ata decidiu sobre a Rota 120 e qual é a situação das oportunidades dessa campanha no CRM?
+- As ações definidas para melhorar o pipeline correspondem aos problemas observados nos dados estruturados?
+
+## Riscos e limitações
+
+- OCR e handwriting podem exigir revisão humana.
+- Tabelas podem perder relações se forem linearizadas incorretamente.
+- Metadados e resumos inferidos pelo modelo podem conter erros.
+- S3 Vectors não fornece busca híbrida nativa nessa configuração.
+- Controle de acesso aplicado tarde pode expor conteúdo ao modelo; os filtros precisam ocorrer antes da recuperação.
+- SQL gerado exige allowlist, somente leitura e limite de bytes.
+- Serviços, disponibilidade regional, limites e preços podem mudar.
+- O acervo é fictício e pequeno; comportamento em escala ainda não foi medido.
+- A POC da Task 08 fornece evidência funcional limitada, não benchmark: handwriting não foi detectado, uma recuperação falhou localmente ao renderizar Unicode e as respostas RAG mostraram cobertura/citação insuficientes. Custo observado e latência consolidada ainda não estão disponíveis.
+
+## Aprendizados arquiteturais
+
+- Formato de arquivo não basta; natureza e estrutura determinam o pipeline.
+- OCR desnecessário aumenta custo e pode reduzir qualidade.
+- CSV é melhor fonte de verdade para cálculos do que texto vetorizado.
+- RAG precisa de proveniência e autorização, não apenas embeddings.
+- Confiança do OCR, confiança da inferência e validação humana são conceitos diferentes.
+- Serverless reduz operação, mas ainda exige limites, observabilidade e cleanup.
+- Uma arquitetura completa não obriga uma POC a criar todos os componentes de uma vez.
+
+## Estrutura do repositório
+
+```text
+.
+├── README.md                  # visão de portfólio
+├── resposta.md               # resposta técnica detalhada das quests
+├── raw/                      # acervo original, somente leitura
+├── diagrams/
+│   └── architecture.md       # diagrama Mermaid consolidado
+└── docs/
+    ├── ACERVO.md             # discovery factual e hashes
+    ├── ARCHITECTURE.md       # princípios e entrega incremental
+    ├── COSTS.md              # guardrails de FinOps
+    ├── SECURITY.md           # segurança e governança de IA
+    ├── DECISIONS.md          # ADRs
+    ├── CHECKPOINT.md         # andamento por task
+    └── tasks/                # critérios de cada etapa
 ```
 
-A Wiki Inteligente deveria retornar uma resposta baseada nos documentos processados, indicando:
+## Documentação principal
 
-- Resumo da resposta;
-- Documentos usados como fonte;
-- Datas relacionadas;
-- Pessoas envolvidas;
-- Decisões encontradas;
-- Possíveis próximos passos.
+- [`resposta.md`](resposta.md) — solução completa e justificativas técnicas.
+- [`docs/ACERVO.md`](docs/ACERVO.md) — fatos observados nos três arquivos.
+- [`diagrams/architecture.md`](diagrams/architecture.md) — arquitetura visual detalhada.
+- [`docs/DECISIONS.md`](docs/DECISIONS.md) — registro das decisões arquiteturais.
+- [`docs/COSTS.md`](docs/COSTS.md) — custos e guardrails.
+- [`docs/SECURITY.md`](docs/SECURITY.md) — segurança e governança.
+- [`docs/CHECKPOINT.md`](docs/CHECKPOINT.md) — estado da execução.
 
----
+## Estado e próximos passos
 
-# 🏆 Sistema de Pontuação
+| Etapa | Estado |
+|---|---|
+| Discovery do acervo | Concluído |
+| Quests 1–4 | Concluídas |
+| Arquitetura final | Concluída |
+| README/portfólio | Concluído |
+| POC AWS | **Concluída dentro dos limites da Task 08** |
+| Evidências e cleanup | **Concluídos na Task 09; recursos removidos e verificados** |
+| Custo observado | Indisponível no Cost Explorer no momento da consulta; não considerado zero |
+| Revisão final Guardião | Pendente — Task 10 |
+| Revisão final | Pendente |
 
-Sua entrega será avaliada como uma jornada de exploração.
+Uma eventual POC deve começar pequena, confirmar região e pricing atuais, apresentar previamente todos os recursos e riscos de cobrança e terminar com inventário e cleanup verificáveis.
 
-## 🥉 Nível Explorador
+## Escopo da entrega
 
-Você alcança este nível se:
-
-- Explicar o problema com clareza;
-- Listar os principais serviços AWS;
-- Descrever um fluxo básico de processamento;
-- Mostrar como os documentos poderiam se tornar pesquisáveis.
-
-## 🥈 Nível Aventureiro
-
-Você alcança este nível se:
-
-- Separar bem armazenamento, extração, normalização, indexação e consulta;
-- Explicar o papel de cada serviço;
-- Incluir metadados;
-- Pensar em segurança e monitoramento;
-- Justificar suas escolhas.
-
-## 🥇 Nível Guardião da Wiki Perdida
-
-Você alcança este nível se:
-
-- Criar uma arquitetura completa e coerente;
-- Explicar o fluxo de ponta a ponta;
-- Usar busca semântica e RAG de forma bem descrita;
-- Propor filtros, metadados e rastreabilidade;
-- Pensar em custos, segurança, governança e evolução futura;
-- Apresentar a solução como se fosse um projeto real para uma empresa.
-
----
-
-# 🚀 Entrega Final
-
-Para concluir o laboratório:
-
-1. Faça um fork deste repositório.
-2. Leia os documentos disponíveis na pasta `raw/`.
-3. Abra o arquivo `resposta.md`.
-4. Preencha as quatro quests principais.
-5. Descreva sua arquitetura usando apenas serviços AWS.
-6. Faça o commit da sua resposta.
-7. Envie o link do seu repositório.
-
----
-
-# 🏁 Mensagem Final da Missão
-
-Você não está apenas organizando arquivos.
-
-Você está reconstruindo a memória de uma empresa.
-
-Cada ata, cada anotação e cada PDF pode esconder uma decisão importante, um risco esquecido ou uma oportunidade perdida.
-
-Sua missão é transformar esse caos documental em uma Wiki Inteligente, pesquisável e segura, usando o poder da nuvem AWS.
-
-Boa expedição, explorador(a).  
-A Wiki Perdida espera por você.
+Este repositório entrega uma análise do acervo e uma arquitetura defensável para a Wiki Corporativa Inteligente. Ele não afirma implantação, benchmark ou resultado AWS inexistente. Essa distinção faz parte da rastreabilidade do projeto: proposta é documentada como proposta; evidência real só será registrada se uma POC for autorizada e executada.
