@@ -4,7 +4,7 @@ Proposta de arquitetura para transformar documentos corporativos heterogêneos e
 
 O projeto parte de três fontes reais do laboratório — um PDF digital, uma ata digitalizada em PNG e uma exportação CSV de CRM — e demonstra por que cada formato exige um pipeline diferente. A solução combina RAG para conhecimento documental com SQL determinístico para dados estruturados.
 
-> **Estado do projeto em 21/08/2026:** discovery, desenho, POC AWS controlada e cleanup concluídos. A POC real em `us-east-1` preservou os três originais, executou uma página Textract, indexou dois documentos em Bedrock Knowledge Bases com S3 Vectors e realizou consultas limitadas. Todos os recursos persistentes inventariados foram removidos e a ausência foi verificada. O Cost Explorer ainda não consolidou dados para o período; custo observado não foi tratado como zero.
+> **Estado final em 23/08/2026:** discovery, desenho, POC AWS controlada, cleanup e revisão Guardião concluídos. A POC real em `us-east-1` preservou os três originais, executou uma página Textract, indexou dois documentos em Bedrock Knowledge Bases com S3 Vectors e realizou consultas limitadas. Todos os recursos persistentes inventariados foram removidos e a ausência foi verificada. O Cost Explorer não havia consolidado dados para o período consultado; custo observado não foi tratado como zero.
 
 ## Visão executiva
 
@@ -272,6 +272,7 @@ Antes de qualquer POC: verificar pricing na região escolhida, criar alerta no A
 - [`docs/COSTS.md`](docs/COSTS.md) — custos e guardrails.
 - [`docs/SECURITY.md`](docs/SECURITY.md) — segurança e governança.
 - [`docs/CHECKPOINT.md`](docs/CHECKPOINT.md) — estado da execução.
+- [`docs/FINAL-REVIEW.md`](docs/FINAL-REVIEW.md) — auditoria final dos critérios Guardião.
 
 ## Estado e próximos passos
 
@@ -284,11 +285,10 @@ Antes de qualquer POC: verificar pricing na região escolhida, criar alerta no A
 | POC AWS | **Concluída dentro dos limites da Task 08** |
 | Evidências e cleanup | **Concluídos na Task 09; recursos removidos e verificados** |
 | Custo observado | Indisponível no Cost Explorer no momento da consulta; não considerado zero |
-| Revisão final Guardião | Pendente — Task 10 |
-| Revisão final | Pendente |
+| Revisão final Guardião | Concluída — Task 10 |
 
-Uma eventual POC deve começar pequena, confirmar região e pricing atuais, apresentar previamente todos os recursos e riscos de cobrança e terminar com inventário e cleanup verificáveis.
+Qualquer reimplantação deve começar pequena, confirmar região e pricing atuais, apresentar previamente todos os recursos e riscos de cobrança e terminar com inventário e cleanup verificáveis.
 
 ## Escopo da entrega
 
-Este repositório entrega uma análise do acervo e uma arquitetura defensável para a Wiki Corporativa Inteligente. Ele não afirma implantação, benchmark ou resultado AWS inexistente. Essa distinção faz parte da rastreabilidade do projeto: proposta é documentada como proposta; evidência real só será registrada se uma POC for autorizada e executada.
+Este repositório entrega uma análise do acervo e uma arquitetura defensável para a Wiki Corporativa Inteligente. Ele não afirma implantação integral, benchmark ou resultado AWS inexistente. A proposta é documentada como proposta; a POC autorizada é registrada apenas pelo que realmente executou, incluindo resultados negativos, custo ainda indisponível e cleanup verificado.

@@ -9,13 +9,13 @@
 ## 👤 Identificação
 
 **Nome:**  
-Preencha aqui
+Leandro Silva
 
 **Data:**  
-Preencha aqui
+23/08/2026
 
 **Link do repositório:**  
-Preencha aqui
+[github.com/ChoqueanoIV/laboratorio-wiki-aws](https://github.com/ChoqueanoIV/laboratorio-wiki-aws)
 
 ---
 
@@ -144,7 +144,7 @@ Serviços que você pode considerar:
 **Sua resposta:**
 
 ```md
-Esta seção descreve uma arquitetura proposta; nenhum recurso AWS foi criado.
+Esta seção descreve a arquitetura completa proposta. Posteriormente, a Task 08 executou uma POC mínima e descartável em `us-east-1`, limitada a S3, Textract, Bedrock Knowledge Bases, Titan Text Embeddings V2, S3 Vectors e IAM temporário. A Task 09 removeu e verificou todos os recursos persistentes inventariados. EventBridge, Step Functions, Lambda, Glue, Athena, DynamoDB, API Gateway, Cognito e Amplify não foram implantados.
 
 Os três arquivos seriam enviados, por AWS CLI ou console da AWS com uma identidade autenticada, para um bucket Amazon S3 privado dedicado aos originais. Cada objeto usaria uma chave imutável e não dependente de subpastas locais, por exemplo `ingestion/<document_id>/<nome_original>`. O `document_id` seria derivado do SHA-256 do conteúdo; assim, o mesmo arquivo pode ser reconhecido mesmo se for reenviado com outro nome, e uma nova versão de conteúdo recebe outra identidade.
 
@@ -387,7 +387,7 @@ O texto observado nunca seria sobrescrito pela sugestão do modelo. Uma revisão
 
 Para o CSV, Bedrock poderia ajudar apenas a interpretar perguntas em linguagem natural ou resumir resultados já calculados por consulta determinística. Contagens, somas, médias, taxas e filtros seriam executados com Amazon Athena sobre dados catalogados, nunca estimados pelo modelo a partir de linhas transformadas em texto.
 
-Também seriam aplicadas salvaguardas de custo e qualidade: processar apenas blocos relevantes, limitar tamanho de entrada e saída, usar baixa aleatoriedade quando suportada pelo modelo escolhido, versionar prompts e amostrar resultados para avaliação humana. Modelo, preço regional, limites e disponibilidade seriam confirmados antes da Task 08. Nesta etapa, o uso do Bedrock é apenas proposto; nenhuma chamada foi executada.
+Também seriam aplicadas salvaguardas de custo e qualidade: processar apenas blocos relevantes, limitar tamanho de entrada e saída, usar baixa aleatoriedade quando suportada pelo modelo escolhido, versionar prompts e amostrar resultados para avaliação humana. Na POC da Task 08, modelo, região, limites e preços foram verificados antes da execução; duas chamadas limitadas de geração no Bedrock produziram evidência útil, mas também mostraram cobertura e fundamentação insuficientes. O enriquecimento estruturado descrito nesta seção continua proposto e não foi implementado pela POC.
 ```
 
 ---
@@ -512,7 +512,7 @@ Alternativas:
 - **Amazon Aurora PostgreSQL com pgvector:** faria sentido se já existisse um banco relacional Aurora ou se vetores e relações transacionais precisassem compartilhar consultas. Criá-lo apenas para três arquivos não se justifica.
 - **S3 Vectors:** favorece armazenamento vetorial econômico, elasticidade e operação serverless para o padrão acadêmico de baixa frequência, aceitando a limitação de busca apenas semântica.
 
-Referências técnicas verificadas em 20/08/2026: documentação oficial da AWS sobre S3 Vectors com Knowledge Bases, configuração de vector stores, chunking e modelos suportados do Bedrock. Pricing e disponibilidade regional continuam sujeitos a mudança e serão revistos antes da Task 08.
+Referências técnicas verificadas em 20/08/2026: documentação oficial da AWS sobre S3 Vectors com Knowledge Bases, configuração de vector stores, chunking e modelos suportados do Bedrock. Pricing e disponibilidade regional foram reconfirmados antes da POC em 21/08/2026 e devem ser verificados novamente antes de qualquer reimplantação.
 ```
 
 ---
@@ -652,9 +652,9 @@ Serviços que você pode considerar:
 - S3 Vectors como primeira opção de baixa frequência; OpenSearch Serverless somente com requisito medido;
 - limites de tokens, resultados recuperados, concorrência Lambda, tentativas e bytes escaneados no workgroup Athena;
 - sincronização da Knowledge Base e chamadas Bedrock somente quando necessárias; logs e temporários com retenção definida;
-- inventário de recursos e cleanup obrigatório em eventual POC.
+- inventário de recursos e cleanup obrigatório em qualquer POC ou reimplantação.
 
-Antes da Task 08 seriam confirmados região, preços atuais, modelo, limites, recursos a criar, risco de cobrança e plano de exclusão. A POC continuaria bloqueada até autorização explícita do usuário.
+Na Task 08, região, preços, modelo, limites, recursos, cobrança e cleanup foram apresentados antes da criação, e a execução só começou após autorização explícita. A Task 09 concluiu e verificou o cleanup. O mesmo gate deve ser repetido em qualquer reimplantação.
 ```
 
 ---
@@ -670,7 +670,7 @@ Explique em poucas linhas a ideia central da sua arquitetura.
 **Sua resposta:**
 
 ```md
-Esta é uma arquitetura AWS proposta, serverless e pay-per-use; nenhum componente foi implementado até esta etapa.
+Esta é uma arquitetura AWS proposta, serverless e pay-per-use. Uma POC mínima validou apenas S3, Textract, Bedrock Knowledge Bases, Titan Text Embeddings V2 e S3 Vectors; todos os recursos persistentes foram removidos na Task 09. Os demais componentes do desenho permanecem propostos.
 
 Os originais entram em um bucket Amazon S3 canônico e privado, recebem `document_id` derivado do SHA-256 e são orquestrados por EventBridge, Step Functions e Lambda. O roteamento respeita a natureza observada: o PDF digital usa extração direta, o PNG usa Amazon Textract e o CSV permanece estruturado em S3/Glue/Athena. Derivados, metadados, confiança e proveniência ficam separados dos originais.
 
@@ -837,7 +837,7 @@ Exemplo:
 - **Falhas silenciosas:** perda de evento ou etapa parcial pode deixar documento ausente. Mitigação: DLQ, estados Step Functions, quarentena lógica, alarmes e reconciliação entre raw e manifestos.
 - **Custos variáveis:** Textract, Bedrock, Knowledge Bases, vetores, Athena e logs crescem com uso. Mitigação: serverless, limites, Budget de US$ 5, tags, retenção, inventário e cleanup; o Budget não interrompe gasto.
 - **Disponibilidade regional e evolução de serviços:** modelos, S3 Vectors, limites e preços podem mudar. Mitigação: verificar região/pricing imediatamente antes da POC e manter OpenSearch/Aurora como alternativas, não recursos simultâneos.
-- **Escopo atual sem evidência de execução:** toda a arquitetura é proposta. Não há métricas, respostas, custo observado, ARN, print ou recurso AWS real a apresentar nesta etapa.
+- **POC limitada, sem benchmark:** a execução real cobriu apenas parte da arquitetura e poucas chamadas. Ela não mede escala, latência consolidada nem qualidade de produção; o custo observado permaneceu indisponível por atraso de consolidação, sem ser tratado como zero. As evidências e limitações reais estão em `docs/TASK08-EVIDENCE.md` e `docs/TASK09-EVIDENCE.md`.
 ```
 
 ---
@@ -879,16 +879,16 @@ Exemplo:
 
 Antes de entregar, confirme se sua solução responde:
 
-- [ ] Como transformar documentos escaneados em texto?
-- [ ] Como lidar com diferentes formatos dentro da mesma pasta `raw/`?
-- [ ] Como armazenar os documentos originais?
-- [ ] Como preservar a rastreabilidade entre resposta e documento fonte?
-- [ ] Como organizar metadados?
-- [ ] Como criar busca semântica?
-- [ ] Como usar Amazon Bedrock na solução?
-- [ ] Como proteger documentos sensíveis?
-- [ ] Como monitorar falhas?
-- [ ] Como a empresa usaria essa Wiki no dia a dia?
+- [x] Como transformar documentos escaneados em texto?
+- [x] Como lidar com diferentes formatos dentro da mesma pasta `raw/`?
+- [x] Como armazenar os documentos originais?
+- [x] Como preservar a rastreabilidade entre resposta e documento fonte?
+- [x] Como organizar metadados?
+- [x] Como criar busca semântica?
+- [x] Como usar Amazon Bedrock na solução?
+- [x] Como proteger documentos sensíveis?
+- [x] Como monitorar falhas?
+- [x] Como a empresa usaria essa Wiki no dia a dia?
 
 ---
 
@@ -899,5 +899,9 @@ Escreva uma breve conclusão defendendo sua solução como se estivesse apresent
 **Sua resposta:**
 
 ```md
-Preencha aqui.
+A solução transforma um acervo heterogêneo em conhecimento consultável sem apagar as diferenças que dão significado aos dados. O PDF digital preserva sua camada textual e evita OCR desnecessário; a imagem digitalizada usa Amazon Textract com confiança e revisão humana; o CRM permanece estruturado para consultas determinísticas no Athena. Sobre essa base, o Amazon Bedrock oferece recuperação semântica e geração fundamentada, enquanto metadados, filtros de autorização e referências à versão original mantêm cada resposta auditável.
+
+O desenho prioriza serviços AWS serverless e pay-per-use, menor privilégio, observabilidade e limites explícitos de custo. A POC controlada confirmou a viabilidade de S3, Textract, Knowledge Bases e S3 Vectors, mas também revelou limitações reais de handwriting, chunking, recuperação e citações. Esses resultados negativos foram preservados como evidência, e todos os recursos persistentes foram removidos. Assim, a proposta é tecnicamente defensável sem confundir arquitetura planejada com implementação ou qualidade ainda não demonstrada.
+
+Para evoluir à produção, a próxima decisão deve ser guiada por avaliação: melhorar extração e chunking, validar fontes, implementar a rota determinística Glue/Athena, aplicar autorização antes da recuperação e medir qualidade, latência e custo. Essa progressão mantém a Wiki útil para o negócio, segura para os dados e honesta sobre os limites de cada resposta.
 ```

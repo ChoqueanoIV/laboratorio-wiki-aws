@@ -8,9 +8,9 @@
 - [x] 05 Quest 4
 - [x] 06 Arquitetura final
 - [x] 07 README/portfólio
-- [ ] 08 POC AWS controlada
-- [ ] 09 Evidências/custos/cleanup
-- [ ] 10 Revisão final
+- [x] 08 POC AWS controlada
+- [x] 09 Evidências/custos/cleanup
+- [x] 10 Revisão final
 
 ## Registro
 
@@ -99,3 +99,12 @@
 - **Integridade:** `raw/` local não foi alterado; somente cópias/versionamentos AWS inventariados foram removidos.
 - **Pendência:** revisão final Guardião, preenchimento dos campos finais e auditoria completa pertencem à Task 10.
 - **Próximo passo:** Task 10 — Revisão Final Guardião, somente após nova solicitação do usuário. Parar aqui.
+
+### Task 10 — Revisão Final Guardião (concluída em 23/08/2026)
+
+- **Auditoria:** revisados integralmente `MASTER-PROMPT.md`, `AGENTS.md`, `README.md`, `resposta.md`, todo o conteúdo textual de `docs/` e a task atual.
+- **Mudanças:** preenchidos identificação, checklist e conclusão em `resposta.md`; corrigidas referências históricas que confundiam arquitetura proposta com POC executada; atualizado o estado no README e no diagrama; criado `docs/FINAL-REVIEW.md`.
+- **Decisões:** nenhuma nova ADR. A revisão apenas aplica e consolida as decisões existentes, preservando a distinção entre proposta, evidência real e limitação observada.
+- **Validações:** hashes de `raw/` idênticos ao inventário; nenhum link local quebrado; Mermaid consistente; nenhum padrão de credencial encontrado; somente serviços AWS; todos os critérios Guardião estão OK ou explicitamente justificados.
+- **Limitações preservadas:** custo observado e latência consolidada indisponíveis; handwriting não detectado; recuperação e citações insuficientes em parte da POC; arquitetura completa não implantada.
+- **Estado final:** entrega concluída no escopo das dez tasks. Qualquer commit ou `git push` posterior exige ação/autorização própria.

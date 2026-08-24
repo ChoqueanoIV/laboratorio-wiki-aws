@@ -1,6 +1,6 @@
 # Arquitetura proposta da Wiki Corporativa Inteligente
 
-> Estado: proposta arquitetural. Nenhum recurso AWS foi criado até a Task 06.
+> Estado: arquitetura completa proposta. A POC mínima da Task 08 validou somente S3, Textract, Bedrock Knowledge Bases, Titan Text Embeddings V2 e S3 Vectors; a Task 09 removeu todos os recursos persistentes inventariados.
 
 ```mermaid
 flowchart TB
@@ -65,4 +65,4 @@ flowchart TB
 
 ## Limites da representação
 
-O diagrama mostra responsabilidades e fluxo lógico, não recursos implantados, ARNs, região, volume, latência ou custo observado. Esses dados só podem ser registrados após POC autorizada.
+O diagrama mostra responsabilidades e fluxo lógico da solução completa, não uma implantação integral. Região, limites, resultados reais, recursos temporários e cleanup da POC estão registrados separadamente em `docs/AWS-RESOURCES.md`, `docs/TASK08-EVIDENCE.md` e `docs/TASK09-EVIDENCE.md`. Latência consolidada e custo observado não ficaram disponíveis e não são inferidos.
